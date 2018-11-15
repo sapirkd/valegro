@@ -4,10 +4,11 @@ import com.amazonaws.services.identitymanagement.AmazonIdentityManagement;
 import com.amazonaws.services.identitymanagement.AmazonIdentityManagementClientBuilder;
 import com.amazonaws.services.identitymanagement.model.*;
 
+
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class QueryPrivilegedEntities {
@@ -25,55 +26,38 @@ public class QueryPrivilegedEntities {
                 "To run this example, supply a policy arn\n" +
                         "Ex: GetPolicy <policy-arn>\n";
 
-//            if (args.length != 1) {
-//                System.out.println(USAGE);
-//                System.exit(1);
-//            }
-
-//            String policy_arn = args[0];
         String policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess";
 
         final AmazonIdentityManagement iam =
                 AmazonIdentityManagementClientBuilder.standard().withRegion("us-east-1").build();
 
-//        GetPolicyRequest request = new GetPolicyRequest()
-//                .withPolicyArn(policy_arn);
-//
-//        GetPolicyResult response = iam.getPolicy(request);
-//
-//        System.out.format("Successfully retrieved policy %s", response.getPolicy().getPolicyName());
-//        System.out.format("Successfully retrieved policy %s", response.getPolicy());
-
         //Query managed policies
+        List<Policy> managedPoliciesWithEntities = queryManagedPoliciesWithEntities(iam);
 
-        List<Policy> managedPolicies = queryManagedPolicies(iam);
-
-        //query inline policies
-
-
-        List<Policy> privilegedPolicies = extractPrivilegedPolicies(managedPolicies);
+        List<Policy> privilegedPolicies = extractPrivilegedPolicies(managedPoliciesWithEntities);
 
 
         privilegedPolicies.forEach(policy -> extractPrivilegedPolicyUsers(iam, policy));
-        privilegedPolicies.forEach(policy -> extractPrivilegedPolicyGroups(iam, policy));
-        privilegedPolicies.forEach(policy -> extractPrivilegedPolicyRoles(iam, policy));
+//        privilegedPolicies.forEach(policy -> extractPrivilegedPolicyGroups(iam, policy)); //FFU
+//        privilegedPolicies.forEach(policy -> extractPrivilegedPolicyRoles(iam, policy)); //FFU
 
-
-//        privilegedPolicies.forEach(policy -> listUsersForPolicy(iam, policy));
-//        privilegedPolicies.forEach(policy -> listGroupsForPolicy(iam, policy));
-//        privilegedPolicies.forEach(policy -> listRolesForPolicy(iam, policy));
+        //privilegedPolicies.forEach(policy -> analyzePrivilegedPolicyStatements(iam, policy)); //FFU
 
         privilegedPolicyEntities.forEach((policy, entities) -> System.out.println(policy +  entities ));
+
         System.out.println(privilegedPolicyEntities.entrySet().stream().mapToInt(entry ->  entry.getValue().size()).sum());
 
+    }
 
+    private static void analyzePrivilegedPolicyStatements(AmazonIdentityManagement iam, Policy policy) {
+        String arn = policy.getArn();
+        ListPolicyVersionsRequest request = new ListPolicyVersionsRequest();
+        request.setPolicyArn(arn);
 
+        ListPolicyVersionsResult result = iam.listPolicyVersions(request);
+        List<PolicyVersion> versions = result.getVersions();
+        versions.forEach(version -> System.out.println(version.getDocument()));
 
-//        AtomicInteger totalEntities = new AtomicInteger();
-////        System.out.println("Total entities found: [" + privilegedPolicyEntities.forEach((policy, entities) -> {
-////
-////        }
-//        );
 
     }
 
@@ -175,7 +159,7 @@ public class QueryPrivilegedEntities {
     }
 
 
-    private static List<Policy> queryManagedPolicies(AmazonIdentityManagement iam) {
+    private static List<Policy> queryManagedPoliciesWithEntities(AmazonIdentityManagement iam) {
         ListPoliciesRequest listPoliciesRequest = new ListPoliciesRequest();
         listPoliciesRequest.setOnlyAttached(true);
 
@@ -199,32 +183,22 @@ public class QueryPrivilegedEntities {
 //       PowerUserAccess - Provides full access to AWS services and resources, but does not allow management of Users and groups.
 //       SystemAdministrator - Grants full access permissions necessary for resources required for application and development operations.
 
-        if(policy.getPolicyName().equals("AdministratorAccess"))
-        {
-            return true;
-        }
 
-        if(policy.getPolicyName().equals("NetworkAdministrator"))
-        {
-            return true;
-        }
+        List<String> privilegedPolicies = new ArrayList<>();
+        privilegedPolicies.add("AdministratorAccess");
+        privilegedPolicies.add("NetworkAdministrator");
+        privilegedPolicies.add("PSMP_Installation_Access_Policy");
+        privilegedPolicies.add("StartStopEC2Instances");
+        privilegedPolicies.add("AmazonEC2FullAccess");
+        privilegedPolicies.add("Billing");
+        privilegedPolicies.add("PowerUserAccess");
+        privilegedPolicies.add("SystemAdministrator");
+        privilegedPolicies.add("DatabaseAdministrator");
 
-        if (policy.getPolicyName().equals("PSMP_Installation_Access_Policy"))
-        {
-            return true;
-        }
 
-        if (policy.getPolicyName().equals("StartStopEC2Instances"))
-        {
-            return true;
-        }
+        return  privilegedPolicies.stream().filter(privilegedPolicy -> policy.getPolicyName().equals(privilegedPolicy)).findFirst().isPresent();
 
-        if (policy.getPolicyName().equals("AmazonEC2FullAccess"))
-        {
-            return true;
-        }
 
-        return false;
     }
 
 
